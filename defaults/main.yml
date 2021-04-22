@@ -1,0 +1,8 @@
+zabbix_agent_version: 5.0
+zabbix_agent_force_repo_upgrade: false
+zabbix_agent_force_pkg_upgrade: "{{ zabbix_agent_force_repo_upgrade }}"
+zabbix_agent_add_host_to_server: "{% if zabbix_agent_server_url is undefined %}false{% else %}true{% endif %}"
+zabbix_agent_login_user: Admin
+zabbix_agent_hostgroups: []
+zabbix_agent_host_templates: []
+zabbix_agent_proxy: ""

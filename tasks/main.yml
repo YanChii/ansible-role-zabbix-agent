@@ -1,0 +1,101 @@
+
+- name: Check required variables
+  fail:
+    msg: "Please define variable 'zabbix_agent_zabbix_server'"
+  when: zabbix_agent_zabbix_server is undefined
+
+- include_vars: "{{ item }}"
+  with_first_found:
+    - "../vars/{{ ansible_distribution }}-{{ ansible_distribution_major_version | int}}.yml"
+    - "../vars/{{ ansible_distribution }}.yml"
+    - "../vars/{{ ansible_os_family }}.yml"
+    - "../vars/defaults.yml"
+  when: zabbix_agent_repo_pkg_url is not defined
+
+- name: Gather the package facts
+  ansible.builtin.package_facts:
+    manager: auto
+  ignore_errors: yes
+
+- name: Add zabbix repo
+  apt:
+    state: present
+    deb: "{{ zabbix_agent_repo_pkg_url }}"
+  when: ansible_distribution_file_variety == "Debian"
+        and (ansible_facts.packages is undefined or 'zabbix-release' not in ansible_facts.packages or zabbix_agent_force_repo_upgrade)
+
+- name: Add zabbix repo
+  yum:
+    state: present
+    name: "{{ zabbix_agent_repo_pkg_url }}"
+  when: ansible_distribution_file_variety == "RedHat" and ansible_distribution_major_version == "7"
+        and (ansible_facts.packages is undefined or 'zabbix-release' not in ansible_facts.packages or zabbix_agent_force_repo_upgrade)
+
+- name: Add zabbix repo
+  dnf:
+    state: present
+    name: "{{ zabbix_agent_repo_pkg_url }}"
+  when: ansible_distribution_file_variety == "RedHat" and ansible_distribution_major_version == "8"
+        and (ansible_facts.packages is undefined or 'zabbix-release' not in ansible_facts.packages or zabbix_agent_force_repo_upgrade)
+
+- name: Install zabbix-agent (Debian-like)
+  apt:
+    name: zabbix-agent
+    state: "{% if zabbix_agent_force_pkg_upgrade %}latest{% else %}present{% endif %}"
+    update_cache: yes
+  when: ansible_distribution_file_variety == "Debian"
+
+- name: Install zabbix-agent (RedHat7-like)
+  yum:
+    name: zabbix-agent
+    state: present
+    update_cache: no
+  when: ansible_distribution_file_variety == "RedHat" and ansible_distribution_major_version == "7"
+
+- name: Install zabbix-agent (RedHat8-like)
+  dnf:
+    name: zabbix-agent
+    state: present
+    update_cache: no
+  when: ansible_distribution_file_variety == "RedHat" and ansible_distribution_major_version == "8"
+
+- name: Set allowed Zabbix servers in config
+  lineinfile:
+    state:        present
+    path:         /etc/zabbix/zabbix_agentd.conf
+    line:         "Server={{ zabbix_agent_zabbix_server }}"
+    regexp:       "^[# ]*Server *="
+    owner:        root
+    group:        zabbix
+    mode:         0640
+  notify: restart zabbix agent
+
+- meta: flush_handlers
+
+- name: Ensure zabbix agent is running
+  service:
+    name: zabbix-agent
+    state: running
+    enabled: true
+
+- name: Add host to Zabbix server
+  local_action:
+    module: community.zabbix.zabbix_host
+    server_url: https://zabbix.tachyum.com
+    server_url: "{{ zabbix_agent_server_url }}"
+    login_user: "{{ zabbix_agent_server_login_user }}"
+    login_password: "{{ zabbix_agent_server_login_pass }}"
+    visible_name: "{{ hostvars[item]['ansible_facts']['fqdn'] }}"
+    host_name: "{{ hostvars[item]['ansible_default_ipv4']['address'] }}"
+    state: present
+    status: enabled
+    description: "Host added by ansible"
+    host_groups: "{{ zabbix_agent_hostgroups }}"
+    link_templates: "{{ zabbix_agent_host_templates }}"
+    proxy: "{{ zabbix_agent_proxy }}"
+    validate_certs: no
+  when: zabbix_agent_add_host_to_server
+  # contact Zabbix server sequentially to prevent DoS
+  run_once: true
+  with_items: "{{ ansible_play_batch }}"
+  tags: add_to_zabbix
