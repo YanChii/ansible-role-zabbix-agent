@@ -41,6 +41,10 @@ sudo pip3 install zabbix-api
     zabbix_agent_version: 5.3
     zabbix_agent_force_repo_upgrade: false
     zabbix_agent_force_pkg_upgrade: true
+    zabbix_agent_server_url: "https://zabbix.tachyum.com"
+    zabbix_agent_server_login_user: Admin
+    zabbix_agent_server_login_pass: 'secretadminpass'
+
     zabbix_agent_hostgroups:
       - linuxes
       - my_other_hosts
